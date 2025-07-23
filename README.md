@@ -1,13 +1,6 @@
 # python-codes
 Dissertation project
 
-
-Uploading wave_packet_barrier.mp4…
-
-
-
-Uploading step_potential_simulation.mp4…
-
 !DOCTYPE html>
 <html>
 <head>
