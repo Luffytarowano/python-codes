@@ -1,0 +1,97 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# === Constants ===
+hbar = 1       # Planck's constant (reduced)
+m = 1          # Particle mass
+L = 1          # Width of the well
+N = 1000       # Number of spatial steps
+x = np.linspace(0, L, N+1)
+dx = x[1] - x[0]
+mhdx2 = m * dx**2 / hbar**2
+Vi = [0 if 0 < xi < L else 1e10 for xi in x]  # Infinite walls
+
+# === Simpson’s Rule ===
+def simp13Xdis(h, fx):
+    n = len(fx)
+    I = fx[0] + fx[-1]
+    for i in range(1, n-1):
+        I += 4 * fx[i] if i % 2 == 1 else 2 * fx[i]
+    return h * I / 3
+
+# === Normalize wavefunction ===
+def psiNorm(psi, dx):
+    norm = np.sqrt(simp13Xdis(dx, [p**2 for p in psi]))
+    return [p / norm for p in psi]
+
+# === Solve wavefunction using recursion ===
+def Psi(mhdx2, psi_init, Vi, E):
+    N = len(psi_init)
+    psiE = psi_init[:]
+    for i in range(2, N):
+        psiE[i] = 2 * (1 - mhdx2 * (E - Vi[i])) * psiE[i - 1] - psiE[i - 2]
+    return psiE
+
+# === Shooting method with node counting ===
+def cntDiffSchr(mhdx2, Vi, psi0, psi1, psiN, nodes, mxItr):
+    N = len(Vi) - 1
+    Emn, Emx = 0, 100  # Initial energy bounds
+    psi_guess = [0] * (N + 1)
+    psi_guess[0], psi_guess[1], psi_guess[N] = psi0, psi1, psiN
+
+    for _ in range(mxItr):
+        E = 0.5 * (Emn + Emx)
+        psi = Psi(mhdx2, psi_guess, Vi, E)
+
+        cnt = sum(psi[i] * psi[i + 1] < 0 for i in range(1, N - 1))
+
+        if cnt > nodes:
+            Emx = E
+        elif cnt < nodes:
+            Emn = E
+        else:
+            if psi[N - 1] > psiN:
+                Emn = E
+            else:
+                Emx = E
+
+        if abs(Emx - Emn) < 1e-10:
+            break
+
+    if abs(Emx - Emn) < 1e-6:
+        return E, psi
+    else:
+        return None, None
+
+# === Analytical energy function ===
+def analytical_energy(n, hbar=1, m=1, L=1):
+    return ((n + 1)**2 * np.pi**2 * hbar**2) / (2 * m * L**2)
+
+# === Solve and Plot ===
+psi0, psiN = 0, 0
+mxItr = 100
+styles = ['k-', 'b--', 'g-.', 'r:']
+plt.figure(figsize=(10, 6))
+
+print("n    Numerical E       Analytical E")
+print("--------------------------------------")
+for n in range(4):  # Solve for 4 lowest eigenstates
+    psi1 = 1e-5 * (-1) ** n
+    E_num, psi = cntDiffSchr(mhdx2, Vi, psi0, psi1, psiN, n, mxItr)
+    E_ana = analytical_energy(n, hbar, m, L)
+
+    if E_num is not None:
+        psi = psiNorm(psi, dx)
+        plt.plot(x, psi, styles[n], label=fr'$\psi_{n}(x)$, E={E_num:.3f}')
+        print(f"{n}    {E_num:12.6f}    {E_ana:12.6f}")
+
+# === Plot and formatting ===
+plt.plot(x, np.array(Vi)/1e10 * 2 - 1.5, 'k--', label="Infinite Walls (scaled)")
+plt.xlabel('x')
+plt.ylabel(r'$\psi(x)$')
+plt.title("Eigenfunctions in 1D Infinite Potential Well")
+plt.grid(True)
+plt.legend()
+plt.ylim(-2, 2)
+plt.tight_layout()
+plt.show()
