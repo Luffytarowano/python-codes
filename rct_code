@@ -1,0 +1,160 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# --- LU Solver for Tridiagonal Matrix using Thomas Algorithm ---
+def LU_solve_tridiag(A, b):
+    A = A.copy().astype(complex)
+    b = b.copy().astype(complex)
+    n = len(b)
+
+    a = np.zeros(n-1, dtype=complex)
+    d = np.zeros(n, dtype=complex)
+    c = np.zeros(n-1, dtype=complex)
+
+    for i in range(n):
+        d[i] = A[i][i]
+        if i > 0:
+            a[i-1] = A[i][i-1]
+        if i < n-1:
+            c[i] = A[i][i+1]
+
+    for i in range(1, n):
+        w = a[i-1] / d[i-1]
+        d[i] -= w * c[i-1]
+        b[i] -= w * b[i-1]
+
+    x = np.zeros(n, dtype=complex)
+    x[-1] = b[-1] / d[-1]
+    for i in range(n-2, -1, -1):
+        x[i] = (b[i] - c[i] * x[i+1]) / d[i]
+
+    return x
+
+# --- TDSE Crank-Nicolson Step ---
+def TDSE_mat_solve(hbar_m, psiR, psiI, V, dx, dt):
+    hbar, m = hbar_m
+    Nx = len(psiR)
+    psi = np.array(psiR) + 1j * np.array(psiI)
+
+    alpha = hbar * dt / (4 * m * dx**2)
+    beta = dt / (2 * hbar)
+    gamma = 2 * alpha + beta * V
+
+    A = np.zeros((Nx, Nx), dtype=complex)
+    B = np.zeros((Nx, Nx), dtype=complex)
+    A[0, 0] = B[0, 0] = 1
+    A[-1, -1] = B[-1, -1] = 1
+
+    for i in range(1, Nx - 1):
+        A[i, i - 1] = -alpha
+        A[i, i] = gamma[i] - 1j
+        A[i, i + 1] = -alpha
+
+        B[i, i - 1] = alpha
+        B[i, i] = -gamma[i] - 1j
+        B[i, i + 1] = alpha
+
+    b = B @ psi
+    psi_new = LU_solve_tridiag(A, b)
+    return np.real(psi_new), np.imag(psi_new)
+
+# --- Normalize Wavefunction ---
+def normalize(psiR, psiI, dx):
+    norm = np.sqrt(np.sum(np.array(psiR)**2 + np.array(psiI)**2) * dx)
+    return psiR / norm, psiI / norm
+
+# --- Gaussian Wave Packet ---
+def gauss_wave(pr, X):
+    x0, sigma, k0 = pr
+    norm = 1 / (np.pi * sigma**2)**0.25
+    psi = np.array([
+        norm * np.exp(-(x - x0)**2 / (2 * sigma**2)) * np.exp(1j * k0 * x)
+        for x in X
+    ])
+    E = (k0**2) / 2
+    return E, psi
+
+# --- Potential Barrier ---
+def pot_barrier(pr, X):
+    V0, width = pr
+    V = np.zeros(len(X))
+    mid = len(X) // 2
+    start = mid - width // 2
+    end = mid + width // 2
+    V[start:end] = V0
+    return V
+
+# --- Main Simulation ---
+def simulate_barrier():
+    # Physical constants
+    hbar = 1
+    m = 1
+    pr = [hbar, m]
+
+    # Grid settings
+    Nx = 800
+    X = np.linspace(0, 100, Nx)
+    dx = X[1] - X[0]
+
+    # Wave packet parameters
+    x0 = 25
+    sigma = 1
+    k0 = 5
+    prwv = [x0, sigma, k0]
+    E, psi = gauss_wave(prwv, X)
+    psiR = np.real(psi)
+    psiI = np.imag(psi)
+    psiR, psiI = normalize(psiR, psiI, dx)
+
+    # Barrier potential
+    V0 = 10
+    width = int(0.05 * Nx)
+    prpt = [V0, width]
+    V = pot_barrier(prpt, X)
+
+    # Time settings
+    Vmax = np.max(V)
+    dt = hbar / (hbar**2 / (m * dx**2) + Vmax / 2)
+    T_max = 10
+    steps = int(T_max / dt)
+    plot_interval = 10
+
+    # Plot setup (aesthetic)
+    plt.style.use('seaborn-v0_8-darkgrid')
+    plt.ion()
+    fig, ax = plt.subplots(figsize=(12, 5))
+    fig.patch.set_facecolor('#f8f8f8')
+    ax.set_facecolor('#f0f0f0')
+
+    Ymax = 1.5 * np.max(np.abs(psiR))
+    Vscale = Ymax / (2 * V0)
+    line_psiR, = ax.plot(X, psiR, label='Re($\psi$)', color='#1f77b4', linewidth=2)
+    line_prob, = ax.plot(X, psiR**2 + psiI**2, label=r'$|\psi|^2$', color='#ff7f0e', linewidth=2)
+    line_V, = ax.plot(X, V * Vscale, color='#7f7f7f', linewidth=1.5, label='Potential')
+    ax.axhline(E * Vscale, color='#2ca02c', linestyle='--', linewidth=1.5, label='Energy')
+    ax.set_xlim(X[0], X[-1])
+    ax.set_ylim(-Ymax, Ymax)
+    ax.set_xlabel('Position $x$', fontsize=12)
+    ax.set_ylabel('Amplitude', fontsize=12)
+    ax.set_title('Quantum Wave Packet Tunneling Through a Barrier', fontsize=14, pad=15)
+    ax.tick_params(labelsize=10)
+    ax.grid(True, linestyle='--', alpha=0.4)
+    ax.legend(fontsize=10, loc='upper right')
+    text_time = ax.text(X[-1]*0.75, -0.85*Ymax, '', fontsize=11, color='black')
+
+    # Time evolution loop
+    for step in range(steps):
+        psiR, psiI = TDSE_mat_solve(pr, psiR, psiI, V, dx, dt)
+        if step % plot_interval == 0:
+            prob_density = psiR**2 + psiI**2
+            line_psiR.set_ydata(psiR)
+            line_prob.set_ydata(prob_density)
+            text_time.set_text(f't = {step*dt:.2f}')
+            plt.pause(0.0005)
+
+    plt.ioff()
+    plt.show()
+
+# --- Run Simulation ---
+if __name__ == "__main__":
+    simulate_barrier() 
