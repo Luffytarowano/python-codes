@@ -1,5 +1,13 @@
 # python-codes
 Dissertation project
+# Infinite Potential Well 
+
+<img width="1080" height="1910" alt="Screenshot_20250724-131041~2" src="https://github.com/user-attachments/assets/ac09ca71-5d52-40b2-97d0-9c03248fe55a" />
+# Finite Potential Well 
+
+<img width="1080" height="1909" alt="Screenshot_20250724-131249~2" src="https://github.com/user-attachments/assets/6d8ddddd-46ac-4bf0-b8ee-66081ef4707d" />
+
+
 
 # Step Potential Simulation
 
